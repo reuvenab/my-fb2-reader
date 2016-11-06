@@ -1,16 +1,18 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
+using System.Net;
+using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
+using System.IO.Compression;
 
-namespace Normalize
+
+namespace Test
 {
     class Program
     {
-        public static string ExecutableLocation = @"c:\temp\catalog";
+        private static readonly string ExecutableLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        private static readonly string CatalogZipFile = "catalog.zip";
+        private static readonly string CatalogTxtFile = "catalog.txt";
 
 
         private static BinaryWriter TitlesFile()
@@ -20,96 +22,121 @@ namespace Normalize
                 );
         }
 
-        private static StreamWriter AuthorsIndexFile()
+        private static StreamWriter LetterIndexFile()
         {
-            return new StreamWriter(Path.Combine(ExecutableLocation, "authors_index.txt"));
+            return new StreamWriter(
+                File.Open(Path.Combine(ExecutableLocation, "letter_index.txt"), FileMode.Create)
+                );
         }
 
-        private static BinaryWriter AuthorsTitleFile()
+        private static BinaryWriter AuthorTitlesFile()
         {
             return new BinaryWriter(
                 File.Open(Path.Combine(ExecutableLocation, "authors.txt"), FileMode.Create)
                 );
+            
+        }
+
+        static void WriteBook(BinaryWriter writer, CatalogReaderAdapter.Book book)
+        {
+            var titleBytes = Encoding.UTF8.GetBytes($"{book.Id};{book.Title}");
+
+            writer.Write((short) titleBytes.Length);
+            writer.Write(titleBytes);
+            writer.Write(Encoding.UTF8.GetBytes("\n"));
         }
 
         static void Main(string[] args)
         {
-            var fileName = @"c:\temp\catalog\catalog.txt";
-            if (args.Length != 0)
-                fileName = args[0];
+            DownloadFile();
 
-            if (!File.Exists(fileName))
-            {
-                Console.WriteLine("File doesn't exist {0}", fileName);
-                return ;
-            }
-
+            var fileName = Path.Combine(ExecutableLocation, CatalogTxtFile);
             
-            var start = DateTime.Now;
-
-            int ind = 1;
-            var authors = new Authors();
+            var catalog = new CatalogReaderAdapter(fileName);
             
-            using (var titles = TitlesFile())
+            var startTime = DateTime.Now;
+
+            using (TextWriter letterIndexWriter = LetterIndexFile())
             {
-                var catalogReader =
-                    new CatalogReaderAdapter(new BinaryReader(File.Open(fileName, FileMode.Open), Encoding.UTF8));
-                
-                long prevPos = 0;
-                
-                foreach (var book in catalogReader)
+                using (var authorTitlesWriter = AuthorTitlesFile())
                 {
-                    var titleBytes = Encoding.UTF8.GetBytes($"{book.Id};{book.Title}");
-
-                    titles.Write((short)titleBytes.Length);
-                    titles.Write(titleBytes);
-                    titles.Write(Encoding.UTF8.GetBytes("\n"));
-                    authors.AddBook(book.Author, prevPos);
-                    prevPos = titles.BaseStream.Position;
-
-                    
-                }
-
-            }
-
-            var letterIndex = new SortedDictionary<char, long>();
-
-            char letter = (char)0;
-            using (var authorsBooks = AuthorsTitleFile())
-            {
-                foreach (var author in authors)
-                {
-                    if (author[0] != letter)
+                    using (var titlesWriter = TitlesFile())
                     {
-                        letter = author[0];
-                        if (!letterIndex.ContainsKey(letter))
+                        
+                        var book = catalog.Books[0];
+                        var prevAuthor = book.Author;
+
+                        WriteAuthorIndex(letterIndexWriter, book.Author[0], 0);
+
+                        var authorTitles = $"{book.Author};{titlesWriter.BaseStream.Position}";
+                        WriteBook(titlesWriter, book);
+
+                        for (int i = 1; i < catalog.Books.Count; i++)
                         {
-                            letterIndex.Add(letter, authorsBooks.BaseStream.Position);
+                            book = catalog.Books[i];
+                            var curTitlePos = titlesWriter.BaseStream.Position;
+                            WriteBook(titlesWriter, book);
+
+                            if (prevAuthor == book.Author)
+                            {
+                                authorTitles += $";{curTitlePos}";
+                                continue;
+                            }
+
+                            WriteAuthorTitles(authorTitlesWriter, authorTitles);
+
+                            if (prevAuthor[0] != book.Author[0])
+                            {
+                                WriteAuthorIndex(letterIndexWriter, book.Author[0], authorTitlesWriter.BaseStream.Position);
+                            }
+
+                            authorTitles = $"{book.Author};{curTitlePos}";
+                            prevAuthor = book.Author;
                         }
-
+                        WriteAuthorIndex(letterIndexWriter, prevAuthor[0], authorTitlesWriter.BaseStream.Position);
+                        Console.WriteLine($"Procesing elapsed: {DateTime.Now - startTime}");
                     }
-                    var authorBytes = Encoding.UTF8.GetBytes(author);
-                    authorsBooks.Write((short)authorBytes.Length);
-                    authorsBooks.Write(authorBytes);
-                    authorsBooks.Write(Encoding.UTF8.GetBytes("\n"));
-                }
-            }
-
-            using (var authorsIndex = AuthorsIndexFile())
-            {
-                foreach (var letterPos in letterIndex)
-                {
-                    authorsIndex.Write($"{letterPos.Key};{letterPos.Value}\n");
                 }
             }
 
 
-            var end = DateTime.Now;
+        }
+
+        private static void DownloadFile()
+        {
+            var url = $"http://flibusta.is/catalog/{CatalogZipFile}";
+            var fileName = Path.Combine(ExecutableLocation, CatalogZipFile);
+
+            var startTime = DateTime.Now;
+            Console.WriteLine($"Download started at: {DateTime.Now}, {url}");
+            var client = new WebClient();
+            client.DownloadFile(new Uri(url), fileName);
+            Console.WriteLine($"Download finished : {DateTime.Now - startTime}");
+
+            startTime = DateTime.Now;
+            Console.WriteLine($"Unzip started at: {DateTime.Now}, {fileName}");
+            
+            ZipFile.ExtractToDirectory(fileName, ExecutableLocation);
+            Console.WriteLine($"Unzip finished: {DateTime.Now - startTime}");
+        }
 
 
-            Console.WriteLine("Time elapsed: {0}", end-start);
-            Console.WriteLine("Books average: {0}, More than 4 books {1}", authors.AveragePerAuthor, authors.MoreThan4);
+        private static void WriteAuthorTitles(BinaryWriter writer, string authorTitles)
+        {
+            var titleBytes = Encoding.UTF8.GetBytes(authorTitles);
 
+            writer.Write((short)titleBytes.Length);
+            writer.Write(titleBytes);
+            writer.Write(Encoding.UTF8.GetBytes("\n"));
+        }
+
+        private static void WriteAuthorIndex(TextWriter writer, char c, long position)
+        {
+            writer.Write($"{c};{position};{(uint)c}\n");
         }
     }
 }
+
+
+
+

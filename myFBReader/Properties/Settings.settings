@@ -1,7 +1,27 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
-<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)">
-  <Profiles>
-    <Profile Name="(Default)" />
-  </Profiles>
-  <Settings />
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="myFBReader.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="RussianOnly" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="AuthorsFilename" Type="System.String" Scope="User">
+      <Value Profile="(Default)">authors.txt</Value>
+    </Setting>
+    <Setting Name="TItlesFilename" Type="System.String" Scope="User">
+      <Value Profile="(Default)">titles.txt</Value>
+    </Setting>
+    <Setting Name="LetterIndexFilename" Type="System.String" Scope="User">
+      <Value Profile="(Default)">letter_index.txt</Value>
+    </Setting>
+    <Setting Name="ReaderName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">cr3.exe</Value>
+    </Setting>
+    <Setting Name="DownloadFolder" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Download</Value>
+    </Setting>
+    <Setting Name="FontSize" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">16</Value>
+    </Setting>
+  </Settings>
 </SettingsFile>
