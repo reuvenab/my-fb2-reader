@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
@@ -27,6 +28,9 @@ namespace myFBReader
                 FilterFunction = RussianOnly;
         }
 
+
+        private static int authorListControlIndex = 1;
+        private static int bookListControlIndex = 2;
 
         private static StreamReader LetterIndexFile()
         {
@@ -151,22 +155,34 @@ namespace myFBReader
                 if (authorLine[0][0] != letter)
                     break;
                 var titles = new uint[authorLine.Length - 1];
-                for (int i = 0; i < titles.Length; i++)
+                for (var i = 0; i < titles.Length; i++)
                 {
                     titles[i]= uint.Parse(authorLine[i+1]);
                 }
                 authors.Add(new Author($"{authorLine[0]} ({titles.Length})", titles));
             
             }
+
+            var tb = new TextBox
+            {
+                Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+                Width = t.Width / 4
+            };
+            tb.TextChanged += tb_TextChanged;
+            t.Controls.Add(tb);
             
+
             var lb = new ListBox
             {
                 DisplayMember = "Name",
                 ValueMember = "Titles",
                 Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
+                Top = tb.Height,
                 Width = t.Width / 4,
-                Height = t.Height,
+                Height = t.Height - tb.Height,
+                Tag = authors
             };
+
             lb.Font = new Font(lb.Font.FontFamily, Properties.Settings.Default.FontSize);
 
             lb.DataSource = authors;
@@ -191,14 +207,24 @@ namespace myFBReader
         }
 
 
-        private void tlb_DoubleClick(object sender, System.EventArgs e)
+        //private void tlb_DoubleClick(object sender, System.EventArgs e)
+        //{
+        //}
+
+        private void tb_TextChanged(object sender, EventArgs e)
         {
+            var tb = (TextBox)sender;
+            var lb = (ListBox)tb.Parent.Controls[authorListControlIndex];
+            var authors = (List<Author>)lb.Tag;
+            var sortedAuthors = authors.Where(item => item.Name.StartsWith(tb.Text));
+            lb.DataSource = sortedAuthors.ToList();
+
         }
 
         private void lb_SelectedIndexChanged(object sender, EventArgs e)
         {
             var lb = (ListBox)sender;
-            var tlb = (ListBox) lb.Parent.Controls[1];
+            var tlb = (ListBox) lb.Parent.Controls[bookListControlIndex];
 
             var titleOffsets = (uint[])lb.SelectedValue;
 
@@ -217,7 +243,7 @@ namespace myFBReader
             tlb.DisplayMember = "Name";
             tlb.ValueMember = "Id";
             tlb.DataSource = titles;
-            tlb.DoubleClick += tlb_DoubleClick;
+            //tlb.DoubleClick += tlb_DoubleClick;
         }
 
         class DownloadState
@@ -238,7 +264,7 @@ namespace myFBReader
 
         private void readButton_Click(object sender, EventArgs e)
         {
-            var tlb = (ListBox)tabControl2.SelectedTab.Controls[1];
+            var tlb = (ListBox)tabControl2.SelectedTab.Controls[bookListControlIndex];
             
             var title = (string)tlb.Text;
             var id = (string)tlb.SelectedValue;
@@ -261,10 +287,12 @@ namespace myFBReader
 
         private static void OpenBook(string fileName)
         {
-            ProcessStartInfo reader = new ProcessStartInfo();
-            reader.Arguments = fileName;
-            reader.FileName = ExternalReaderName;
-            reader.WindowStyle = ProcessWindowStyle.Maximized;
+            var reader = new ProcessStartInfo
+            {
+                Arguments = fileName,
+                FileName = ExternalReaderName,
+                WindowStyle = ProcessWindowStyle.Maximized
+            };
             Process.Start(reader);
         }
 

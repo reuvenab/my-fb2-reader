@@ -152,6 +152,7 @@
             this.readButton.TabIndex = 1;
             this.readButton.Text = "Читать";
             this.readButton.UseVisualStyleBackColor = true;
+            this.readButton.Click += new System.EventHandler(this.readButton_Click);
             // 
             // Form1
             // 
