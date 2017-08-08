@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -25,12 +24,8 @@ namespace myFBReader
             toolStripStatusLabel1.Text = "";
 
             if (Properties.Settings.Default.RussianOnly)
-                FilterFunction = RussianOnly;
+                _filterFunction = RussianOnly;
         }
-
-
-        private static int authorListControlIndex = 1;
-        private static int bookListControlIndex = 2;
 
         private static StreamReader LetterIndexFile()
         {
@@ -39,38 +34,44 @@ namespace myFBReader
 
         private readonly FileStream _titlesFile = new FileStream(Path.Combine(ExecutableLocation, Properties.Settings.Default.TItlesFilename), FileMode.Open);
         private readonly FileStream _authorsTitleFile =  new FileStream(Path.Combine(ExecutableLocation, Properties.Settings.Default.AuthorsFilename), FileMode.Open);
-        
+
+
+        class LetterData
+        {
+            public LetterData(long letterOffset)
+            {
+                LetterOffset = letterOffset;
+            }
+
+            public long LetterOffset;
+            public List<Author> authors;
+        }
+
+
+        readonly Dictionary<char, LetterData> _lettersDict = new Dictionary<char, LetterData>(200);
+
         private void Form1_Load(object sender, EventArgs e)
         {
             using (TextReader letterIndexReader = LetterIndexFile())
             {
-                tabControl2.Font = new Font(tabControl2.Font.FontFamily, Properties.Settings.Default.FontSize);
                 string line;
                 while ((line = letterIndexReader.ReadLine()) != null)
                 {
                     var letterOffset = line.Split(';');
-                    if (FilterFunction != null && FilterFunction(letterOffset[0][0]) )
+                    if (_filterFunction != null && _filterFunction(letterOffset[0][0]) )
                         continue;
-                    var tp = new TabPage {Text = letterOffset[0][0].ToString(), Tag = long.Parse(letterOffset[1]) };
-                    //tp.Font = new Font(tp.Font.FontFamily, Properties.Settings.Default.FontSize+10);
-                    tabControl2.TabPages.Add(tp);
-                    tp.AutoSize = true;
+                    _lettersDict.Add( letterOffset[0][0], new LetterData(long.Parse(letterOffset[1])) );
                 }
             }
-            tabControl2.SelectedIndexChanged += tabControl2_SelectedIndexChanged;
             if (!Directory.Exists(DownloadLocation))
             {
                 Directory.CreateDirectory(DownloadLocation);
-            }
-            if (0 < tabControl2.TabPages.Count)
-            {
-                tabControl2.SelectedIndex = 0;
             }
         }
 
         delegate bool FilterFunctionDelegate(char letter);
 
-        private readonly FilterFunctionDelegate FilterFunction;
+        private readonly FilterFunctionDelegate _filterFunction;
         private static bool RussianOnly(char letter)
         {
             return letter < 'А' || 'я' < letter;
@@ -78,7 +79,6 @@ namespace myFBReader
 
         private string ReadAuthorLine(ref byte[] buff)
         {
-            
             _authorsTitleFile.Read(buff, 0, 2);
             var lineSize = BitConverter.ToUInt16(buff, 0);
             if (buff.Length < lineSize)
@@ -130,24 +130,10 @@ namespace myFBReader
             public string Id { get; }
         }
 
-
-        private void tabControl2_SelectedIndexChanged(object sender, EventArgs e)
+        List<Author> GetAuthors(char letter, long offset)
         {
-
-            var tc = (TabControl)sender;
-
-            var t = tc.SelectedTab;
-
-            if (t.Controls.Count != 0)
-                return;
-
-            var letter = t.Text[0];
-            var buff = new byte[1000];
-
-            var offset = (long)t.Tag;
-
             var authors = new List<Author>();
-
+            var buff = new byte[1000];
             _authorsTitleFile.Seek(offset, SeekOrigin.Begin);
             while (true)
             {
@@ -157,74 +143,47 @@ namespace myFBReader
                 var titles = new uint[authorLine.Length - 1];
                 for (var i = 0; i < titles.Length; i++)
                 {
-                    titles[i]= uint.Parse(authorLine[i+1]);
+                    titles[i] = uint.Parse(authorLine[i + 1]);
                 }
                 authors.Add(new Author($"{authorLine[0]} ({titles.Length})", titles));
-            
+
             }
-
-            var tb = new TextBox
-            {
-                Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
-                Width = t.Width / 4
-            };
-            tb.TextChanged += tb_TextChanged;
-            t.Controls.Add(tb);
-            
-
-            var lb = new ListBox
-            {
-                DisplayMember = "Name",
-                ValueMember = "Titles",
-                Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
-                Top = tb.Height,
-                Width = t.Width / 4,
-                Height = t.Height - tb.Height,
-                Tag = authors
-            };
-
-            lb.Font = new Font(lb.Font.FontFamily, Properties.Settings.Default.FontSize);
-
-            lb.DataSource = authors;
-
-            lb.SelectedIndexChanged += lb_SelectedIndexChanged;
-
-            t.Controls.Add(lb);
-
-            var titlesLb = new ListBox
-                {
-                    Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right,
-                    Left = lb.Width,
-                    Width = t.Width - lb.Width,
-                    Height = t.Height,
-            };
-            titlesLb.Font = new Font(titlesLb.Font.FontFamily, Properties.Settings.Default.FontSize);
-            
-            //lb.MouseDoubleClick += tlb_MouseDoubleClick;
-
-            t.Controls.Add(titlesLb);
-
+            return authors;
         }
-
 
         //private void tlb_DoubleClick(object sender, System.EventArgs e)
         //{
         //}
 
-        private void tb_TextChanged(object sender, EventArgs e)
+        private void AuthorLookup_TextChanged(object sender, EventArgs e)
         {
-            var tb = (TextBox)sender;
-            var lb = (ListBox)tb.Parent.Controls[authorListControlIndex];
-            var authors = (List<Author>)lb.Tag;
-            var sortedAuthors = authors.Where(item => item.Name.StartsWith(tb.Text));
-            lb.DataSource = sortedAuthors.ToList();
+            var t = AuthorLookup.Text.Trim();
+            if (t.Length == 0)
+                return;
 
+            var firstUpper = char.ToUpper(t[0]);
+
+            if (!_lettersDict.ContainsKey(firstUpper))
+                return;
+
+            var letterData = _lettersDict[firstUpper];
+
+            if (letterData.authors == null)
+            {
+                letterData.authors = GetAuthors(firstUpper, letterData.LetterOffset);
+            }
+
+            AuthorsList.DisplayMember = "Name";
+            AuthorsList.ValueMember = "Titles";
+            var sortedAuthors = letterData.authors.Where(item => item.Name.StartsWith(t));
+            AuthorsList.DataSource = sortedAuthors.ToList();
+                
         }
 
-        private void lb_SelectedIndexChanged(object sender, EventArgs e)
+
+        private void AuthorsList_SelectedIndexChanged(object sender, EventArgs e)
         {
-            var lb = (ListBox)sender;
-            var tlb = (ListBox) lb.Parent.Controls[bookListControlIndex];
+            var lb = AuthorsList;
 
             var titleOffsets = (uint[])lb.SelectedValue;
 
@@ -235,16 +194,17 @@ namespace myFBReader
             foreach (var offset in titleOffsets)
             {
                 var titleLine = ReadTitleLine(offset, ref buff).Split(';');
-                if (FilterFunction != null && FilterFunction(titleLine[1][0]))
-                    continue;
+                //if (FilterFunction != null && FilterFunction(titleLine[1][0]))
+                //    continue;
                 titles.Add(new Title(titleLine[1], titleLine[0]));
             }
 
-            tlb.DisplayMember = "Name";
-            tlb.ValueMember = "Id";
-            tlb.DataSource = titles;
-            //tlb.DoubleClick += tlb_DoubleClick;
+            TitlesList.DisplayMember = "Name";
+            TitlesList.ValueMember = "Id";
+            TitlesList.DataSource = titles;
+
         }
+
 
         class DownloadState
         {
@@ -264,9 +224,9 @@ namespace myFBReader
 
         private void readButton_Click(object sender, EventArgs e)
         {
-            var tlb = (ListBox)tabControl2.SelectedTab.Controls[bookListControlIndex];
-            
-            var title = (string)tlb.Text;
+            var tlb = TitlesList;
+
+            var title = tlb.Text;
             var id = (string)tlb.SelectedValue;
             var url = $"http://flibusta.is/b/{id}/fb2";
             var fileName = Path.Combine(DownloadLocation, $"{id}.fb2");
@@ -308,7 +268,17 @@ namespace myFBReader
 
             toolStripStatusLabel1.Text = $"Download complete: {ds.Id}";
             messages.Text += $"Книга {ds.Title} доступна: {ds.Filename}\n\n";
-            OpenBook(ds.Filename);
+            try
+            {
+                OpenBook(ds.Filename);
+            }
+            catch (Exception ex)
+            {
+                messages.Text += ex.Message;
+            }
+            
         }
+
+     
     }
 }

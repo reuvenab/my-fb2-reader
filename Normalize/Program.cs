@@ -1,14 +1,14 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using System.IO.Compression;
+using Test;
 
-
-namespace Test
+namespace Normalize
 {
-    class Program
+    static class Program
     {
         private static readonly string ExecutableLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         private static readonly string CatalogZipFile = "catalog.zip";
@@ -37,7 +37,7 @@ namespace Test
             
         }
 
-        static void WriteBook(BinaryWriter writer, CatalogReaderAdapter.Book book)
+        private static void WriteBook(BinaryWriter writer, CatalogReaderAdapter.Book book)
         {
             var titleBytes = Encoding.UTF8.GetBytes($"{book.Id};{book.Title}");
 
@@ -46,7 +46,7 @@ namespace Test
             writer.Write(Encoding.UTF8.GetBytes("\n"));
         }
 
-        static void Main(string[] args)
+        static void Main()
         {
             DownloadFile();
 
