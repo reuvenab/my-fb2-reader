@@ -1,13 +1,12 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 
-namespace Test
+namespace CatalogLib
 {
-    class CatalogReaderAdapter 
+    public class CatalogReaderAdapter 
     {
         public class Book
         {
@@ -18,13 +17,12 @@ namespace Test
             private const int MiddleNameInd = 2;
             private const int TitleNameInd = 3;
             private readonly int _idInd = 8;
-            private readonly string[] _fields; 
-            private readonly string _author;
-            
+            private readonly string[] _fields;
+
             public Book(string bookLine, long pos)
             {
                 _fields = bookLine.Split(';');
-                _author = SetAuthor(_fields);
+                Author = SetAuthor(_fields);
 
                 if (_idInd < _fields.Length - 1)
                     _idInd = _fields.Length - 1;
@@ -52,34 +50,28 @@ namespace Test
 
             public string Title => _fields[TitleNameInd].Trim();
             public string Id => _fields[_idInd].Trim();
-            public string Author => _author;
-
+            public string Author { get; }
         }
 
-        private readonly string _fileName;
-        private readonly long _fileSize;
-        private MemoryMappedFile _mmf;
-        private MemoryMappedViewAccessor _accessor;
         public readonly List<Book> Books = new List<Book>(423190);
 
         public CatalogReaderAdapter(string fileName)
         {
-            _fileName = fileName;
-            _fileSize = new FileInfo(fileName).Length;
+            var fileSize = new FileInfo(fileName).Length;
 
             var startTime = DateTime.Now;
 
-            _mmf = MemoryMappedFile.CreateFromFile(_fileName, FileMode.Open);
-            _accessor = _mmf.CreateViewAccessor(0, _fileSize);
+            var mmf = MemoryMappedFile.CreateFromFile(fileName, FileMode.Open);
+            var accessor = mmf.CreateViewAccessor(0, fileSize);
 
             var buffer = new byte[4096];
             var j = 0;
             long i = 0;
-            while (i < _fileSize && _accessor.ReadByte(i) != 0xA) ++i;
+            while (i < fileSize && accessor.ReadByte(i) != 0xA) ++i;
             ++i;
-            for (; i < _fileSize; ++i, ++j)
+            for (; i < fileSize; ++i, ++j)
             {
-                buffer[j] = _accessor.ReadByte(i);
+                buffer[j] = accessor.ReadByte(i);
                 if (buffer[j] != 0xA) continue;
                 var bookPos = i - j;
                 var book = new Book(Encoding.UTF8.GetString(buffer, 0, j), bookPos);

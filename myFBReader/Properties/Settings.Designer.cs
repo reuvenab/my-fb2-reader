@@ -37,42 +37,6 @@ namespace myFBReader.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("authors.txt")]
-        public string AuthorsFilename {
-            get {
-                return ((string)(this["AuthorsFilename"]));
-            }
-            set {
-                this["AuthorsFilename"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("titles.txt")]
-        public string TItlesFilename {
-            get {
-                return ((string)(this["TItlesFilename"]));
-            }
-            set {
-                this["TItlesFilename"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("letter_index.txt")]
-        public string LetterIndexFilename {
-            get {
-                return ((string)(this["LetterIndexFilename"]));
-            }
-            set {
-                this["LetterIndexFilename"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("cr3.exe")]
         public string ReaderName {
             get {

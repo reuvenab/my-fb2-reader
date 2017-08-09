@@ -27,31 +27,63 @@ namespace myFBReader
                 _filterFunction = RussianOnly;
         }
 
-        private static StreamReader LetterIndexFile()
-        {
-            return new StreamReader(Path.Combine(ExecutableLocation, Properties.Settings.Default.LetterIndexFilename));
-        }
-
-        private readonly FileStream _titlesFile = new FileStream(Path.Combine(ExecutableLocation, Properties.Settings.Default.TItlesFilename), FileMode.Open);
-        private readonly FileStream _authorsTitleFile =  new FileStream(Path.Combine(ExecutableLocation, Properties.Settings.Default.AuthorsFilename), FileMode.Open);
-
+        private FileStream _titlesFile;
+        private FileStream _authorsFile;
 
         class LetterData
         {
-            public LetterData(long letterOffset)
+            public LetterData(char letter, long offset, FileStream authorsStream)
             {
-                LetterOffset = letterOffset;
+                _offset = offset;
+                _authorsStream = authorsStream;
+                _letter = letter;
             }
 
-            public long LetterOffset;
-            public List<Author> authors;
+            private readonly char _letter;
+            private readonly long _offset;
+            private readonly FileStream _authorsStream;
+
+            private List<Author> _authors;
+            public List<Author> Authors => _authors ?? (_authors = GetAuthors());
+
+            
+            private List<Author> GetAuthors()
+            {
+                var authors = new List<Author>();
+                var buff = new byte[1000];
+                _authorsStream.Seek(_offset, SeekOrigin.Begin);
+                while (true)
+                {
+                    var authorLine = ReadAuthorLine(ref buff, _authorsStream).Split(';');
+                    if (authorLine[0][0] != _letter)
+                        break;
+                    var titles = new uint[authorLine.Length - 1];
+                    for (var i = 0; i < titles.Length; i++)
+                    {
+                        titles[i] = uint.Parse(authorLine[i + 1]);
+                    }
+                    authors.Add(new Author($"{authorLine[0]} ({titles.Length})", titles));
+                }
+                return authors;
+            }
         }
 
 
         readonly Dictionary<char, LetterData> _lettersDict = new Dictionary<char, LetterData>(200);
 
+
+        static StreamReader LetterIndexFile()
+        {
+            return new StreamReader(Path.Combine(ExecutableLocation, CatalogLib.Catalog.LetterIndexFileName));
+        }
+
         private void Form1_Load(object sender, EventArgs e)
         {
+            CatalogLib.Catalog.Check(ExecutableLocation);
+
+            _titlesFile = new FileStream(Path.Combine(ExecutableLocation, CatalogLib.Catalog.TitlesFileName), FileMode.Open);
+            _authorsFile = new FileStream(Path.Combine(ExecutableLocation, CatalogLib.Catalog.AuthorsFileName), FileMode.Open);
+
             using (TextReader letterIndexReader = LetterIndexFile())
             {
                 string line;
@@ -60,7 +92,7 @@ namespace myFBReader
                     var letterOffset = line.Split(';');
                     if (_filterFunction != null && _filterFunction(letterOffset[0][0]) )
                         continue;
-                    _lettersDict.Add( letterOffset[0][0], new LetterData(long.Parse(letterOffset[1])) );
+                    _lettersDict.Add( letterOffset[0][0], new LetterData(letterOffset[0][0], long.Parse(letterOffset[1]), _authorsFile) );
                 }
             }
             if (!Directory.Exists(DownloadLocation))
@@ -77,28 +109,27 @@ namespace myFBReader
             return letter < 'А' || 'я' < letter;
         }
 
-        private string ReadAuthorLine(ref byte[] buff)
+        private static string ReadAuthorLine(ref byte[] buff, FileStream authorsStream)
         {
-            _authorsTitleFile.Read(buff, 0, 2);
+            authorsStream.Read(buff, 0, 2);
             var lineSize = BitConverter.ToUInt16(buff, 0);
             if (buff.Length < lineSize)
                 buff = new byte[lineSize];
-            //_authorsTitleFile.Seek(2, SeekOrigin.Current);
-            _authorsTitleFile.Read(buff, 0, lineSize);
+            //_authorsFile.Seek(2, SeekOrigin.Current);
+            authorsStream.Read(buff, 0, lineSize);
             var authorLine = Encoding.UTF8.GetString(buff, 0, lineSize);
-            _authorsTitleFile.Seek(1, SeekOrigin.Current); // \n
+            authorsStream.Seek(1, SeekOrigin.Current); // \n
             return authorLine;
-
         }
 
-        private string ReadTitleLine(long offset, ref byte[] buff)
+        private static string ReadTitleLine(long offset, ref byte[] buff, FileStream titlesStream)
         {
-            _titlesFile.Seek(offset, SeekOrigin.Begin); 
-            _titlesFile.Read(buff, 0, 2);
+            titlesStream.Seek(offset, SeekOrigin.Begin);
+            titlesStream.Read(buff, 0, 2);
             var lineSize = BitConverter.ToUInt16(buff, 0);
             if (buff.Length < lineSize)
                 buff = new byte[lineSize];
-            _titlesFile.Read(buff, 0, lineSize);
+            titlesStream.Read(buff, 0, lineSize);
             var titleLine = Encoding.UTF8.GetString(buff, 0, lineSize);
             return titleLine;
         }
@@ -129,29 +160,7 @@ namespace myFBReader
 
             public string Id { get; }
         }
-
-        List<Author> GetAuthors(char letter, long offset)
-        {
-            var authors = new List<Author>();
-            var buff = new byte[1000];
-            _authorsTitleFile.Seek(offset, SeekOrigin.Begin);
-            while (true)
-            {
-                var authorLine = ReadAuthorLine(ref buff).Split(';');
-                if (authorLine[0][0] != letter)
-                    break;
-                var titles = new uint[authorLine.Length - 1];
-                for (var i = 0; i < titles.Length; i++)
-                {
-                    titles[i] = uint.Parse(authorLine[i + 1]);
-                }
-                authors.Add(new Author($"{authorLine[0]} ({titles.Length})", titles));
-
-            }
-            return authors;
-        }
-
-        //private void tlb_DoubleClick(object sender, System.EventArgs e)
+    //private void tlb_DoubleClick(object sender, System.EventArgs e)
         //{
         //}
 
@@ -168,14 +177,9 @@ namespace myFBReader
 
             var letterData = _lettersDict[firstUpper];
 
-            if (letterData.authors == null)
-            {
-                letterData.authors = GetAuthors(firstUpper, letterData.LetterOffset);
-            }
-
             AuthorsList.DisplayMember = "Name";
             AuthorsList.ValueMember = "Titles";
-            var sortedAuthors = letterData.authors.Where(item => item.Name.StartsWith(t));
+            var sortedAuthors = letterData.Authors.Where(item => item.Name.StartsWith(t));
             AuthorsList.DataSource = sortedAuthors.ToList();
                 
         }
@@ -193,7 +197,7 @@ namespace myFBReader
 
             foreach (var offset in titleOffsets)
             {
-                var titleLine = ReadTitleLine(offset, ref buff).Split(';');
+                var titleLine = ReadTitleLine(offset, ref buff, _titlesFile).Split(';');
                 //if (FilterFunction != null && FilterFunction(titleLine[1][0]))
                 //    continue;
                 titles.Add(new Title(titleLine[1], titleLine[0]));
@@ -238,7 +242,8 @@ namespace myFBReader
             var ds = new DownloadState(title, id, url, fileName);
 
             toolStripStatusLabel1.Text = $"Downloading {id}";
-            messages.Text = $"Скачивает книгу: {title} \n Ссылка: {url} \n";
+            messages.Text += $"Скачивает книгу: {title} Ссылка: {url}";
+            messages.Text += Environment.NewLine;
 
             var client = new WebClient();
             client.DownloadFileCompleted += client_DownloadFileCompleted;
@@ -267,7 +272,9 @@ namespace myFBReader
             }
 
             toolStripStatusLabel1.Text = $"Download complete: {ds.Id}";
-            messages.Text += $"Книга {ds.Title} доступна: {ds.Filename}\n\n";
+            messages.Text += $"Книга {ds.Title} доступна: {ds.Filename}";
+            messages.Text += Environment.NewLine;
+            messages.Text += Environment.NewLine;
             try
             {
                 OpenBook(ds.Filename);
