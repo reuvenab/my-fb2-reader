@@ -25,6 +25,7 @@ namespace myFBReader
 
             if (Properties.Settings.Default.RussianOnly)
                 _filterFunction = RussianOnly;
+
         }
 
         private FileStream _titlesFile;
@@ -148,7 +149,7 @@ namespace myFBReader
             public uint[] Titles { get; }
         }
 
-        class Title
+        class Title : IComparable<Title>
         {
             public Title(string name, string id)
             {
@@ -159,6 +160,10 @@ namespace myFBReader
             public string Name { get; }
 
             public string Id { get; }
+            public int CompareTo(Title other)
+            {
+                return Name.CompareTo(other.Name);
+            }
         }
     //private void tlb_DoubleClick(object sender, System.EventArgs e)
         //{
@@ -169,7 +174,6 @@ namespace myFBReader
             var t = AuthorLookup.Text.Trim();
             if (t.Length == 0)
                 return;
-
             var firstUpper = char.ToUpper(t[0]);
 
             if (!_lettersDict.ContainsKey(firstUpper))
@@ -202,7 +206,9 @@ namespace myFBReader
                 //    continue;
                 titles.Add(new Title(titleLine[1], titleLine[0]));
             }
+            titles.Sort();
 
+            TitlesList.Tag = titles;
             TitlesList.DisplayMember = "Name";
             TitlesList.ValueMember = "Id";
             TitlesList.DataSource = titles;
@@ -282,10 +288,28 @@ namespace myFBReader
             catch (Exception ex)
             {
                 messages.Text += ex.Message;
+                messages.Text += Environment.NewLine;
             }
             
         }
 
-     
+        private void TitleLookup_TextChanged(object sender, EventArgs e)
+        {
+            var t = TitleLookup.Text.Trim();
+            var titles = TitlesList.Tag as List<Title>;
+            if (t.Length == 0  || titles == null)
+            {
+                if (titles != null)
+                    TitlesList.DataSource = titles;
+                return;
+            }
+            var filteredTitles = titles.Where(item => item.Name.StartsWith(t));
+            TitlesList.DataSource = filteredTitles.ToList();
+        }
+
+        private void Form1_Shown(object sender, EventArgs e)
+        {
+            AuthorLookup.Focus();
+        }
     }
 }
