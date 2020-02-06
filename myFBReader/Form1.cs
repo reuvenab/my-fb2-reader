@@ -232,6 +232,17 @@ namespace myFBReader
             }
         }
 
+        private const int max_messages_cnt = 10;
+        private List<string> last_messages = new List<string>(max_messages_cnt);
+
+        private void AddMessage(string Message)
+        {
+            if (last_messages.Count > max_messages_cnt)
+                last_messages.RemoveAt(max_messages_cnt - 1);
+            last_messages.Insert(0, Message);
+            messages.Text = last_messages.Aggregate( (string Agg, string CurItem) => Agg + CurItem + Environment.NewLine);
+        }
+
         private void readButton_Click(object sender, EventArgs e)
         {
             var tlb = TitlesList;
@@ -242,14 +253,20 @@ namespace myFBReader
             var fileName = Path.Combine(DownloadLocation, $"{id}.fb2");
             if (File.Exists(fileName))
             {
-                OpenBook(fileName);
+                try
+                {
+                    OpenBook(fileName);
+                }
+                catch (Exception ex)
+                {
+                    AddMessage(ex.Message);
+                }
                 return;
             }
             var ds = new DownloadState(title, id, url, fileName);
 
-            toolStripStatusLabel1.Text = $"Downloading {id}";
-            messages.Text += $"Скачивает книгу: {title} Ссылка: {url}";
-            messages.Text += Environment.NewLine;
+            toolStripStatusLabel1.Text = $"Скачивает книгу";
+            AddMessage($"Скачивает книгу: {title} Ссылка: {url}");
 
             var client = new WebClient();
             client.DownloadFileCompleted += client_DownloadFileCompleted;
@@ -258,13 +275,21 @@ namespace myFBReader
 
         private static void OpenBook(string fileName)
         {
-            var reader = new ProcessStartInfo
+            try
             {
-                Arguments = fileName,
-                FileName = ExternalReaderName,
-                WindowStyle = ProcessWindowStyle.Maximized
-            };
-            Process.Start(reader);
+                var reader = new ProcessStartInfo
+                {
+                    Arguments = fileName,
+                    FileName = ExternalReaderName,
+                    WindowStyle = ProcessWindowStyle.Maximized
+                };
+                Process.Start(reader);
+            }
+            catch (Exception)
+            {
+                throw new Exception($"Программа просмотра {ExternalReaderName} не найдена");
+            }
+           
         }
 
         private void client_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -272,23 +297,21 @@ namespace myFBReader
             var ds = (DownloadState)e.UserState;
             if (e.Error != null)
             {
-                toolStripStatusLabel1.Text = $"Download failed: {ds.Id}";
-                messages.Text = e.Error.Message;
+                toolStripStatusLabel1.Text = $"Не удалось скачать файл: {ds.Id}";
+                AddMessage(e.Error.Message);
                 return;
             }
 
-            toolStripStatusLabel1.Text = $"Download complete: {ds.Id}";
-            messages.Text += $"Книга {ds.Title} доступна: {ds.Filename}";
-            messages.Text += Environment.NewLine;
-            messages.Text += Environment.NewLine;
+            toolStripStatusLabel1.Text = $"Файл скачан: {ds.Id}";
+            AddMessage($"Книга {ds.Title} доступна: {ds.Filename}");
+            
             try
             {
                 OpenBook(ds.Filename);
             }
             catch (Exception ex)
             {
-                messages.Text += ex.Message;
-                messages.Text += Environment.NewLine;
+                AddMessage(ex.Message);
             }
             
         }
